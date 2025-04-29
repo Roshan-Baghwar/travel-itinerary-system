@@ -2,20 +2,27 @@ from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
 from models import Trip, Day, Hotel, Transfer, Activity, RecommendedItinerary
 from datetime import datetime, timedelta
+import traceback
 
 def seed_db():
     # Create tables
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.drop_all(bind=engine)  # Clear existing tables
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Error creating tables: {e}")
+        return
     
     db = SessionLocal()
     try:
-        # Clear existing data
+        # Clear existing data (redundant but ensures clean slate)
         db.query(Trip).delete()
         db.query(Day).delete()
         db.query(Hotel).delete()
         db.query(Transfer).delete()
         db.query(Activity).delete()
         db.query(RecommendedItinerary).delete()
+        db.commit()
         
         # Seed Hotels
         hotels = [
@@ -26,6 +33,8 @@ def seed_db():
             Hotel(name="Amari Phuket", location="Patong Beach")
         ]
         db.add_all(hotels)
+        db.commit()
+        print(f"Seeded {len(hotels)} hotels")
         
         # Seed Activities
         activities = [
@@ -36,17 +45,8 @@ def seed_db():
             Activity(name="Emerald Pool Trek", location="Krabi")
         ]
         db.add_all(activities)
-        
-        # Seed Transfers
-        transfers = [
-            Transfer(description="Phuket Airport to Karon Beach"),
-            Transfer(description="Phuket Pier to Hotel"),
-            Transfer(description="Krabi Airport to Ao Nang"),
-            Transfer(description="Hotel to Railay Beach"),
-            Transfer(description="Patong to Karon Beach")
-        ]
-        db.add_all(transfers)
         db.commit()
+        print(f"Seeded {len(activities)} activities")
         
         # Seed Recommended Itineraries (2-8 nights)
         itineraries = [
@@ -55,9 +55,18 @@ def seed_db():
         ]
         db.add_all(itineraries)
         db.commit()
+        print(f"Seeded {len(itineraries)} itineraries")
         
-        # Seed Days for each Itinerary
+        # Seed Days and Transfers for each Itinerary
         start_date = datetime(2025, 5, 1)
+        transfer_descriptions = [
+            "Phuket Airport to Karon Beach",
+            "Phuket Pier to Hotel",
+            "Krabi Airport to Ao Nang",
+            "Hotel to Railay Beach",
+            "Patong to Karon Beach"
+        ]
+        
         for itinerary in itineraries:
             days = [
                 Day(date=start_date + timedelta(days=i), hotel_id=hotels[i % len(hotels)].id)
@@ -65,15 +74,26 @@ def seed_db():
             ]
             db.add_all(days)
             db.commit()
+            print(f"Seeded {len(days)} days for {itinerary.name}")
             
-            # Link Days to Itinerary and add Transfers/Activities
+            # Create Transfers and link to Days
             for i, day in enumerate(days):
-                day.transfers.append(transfers[i % len(transfers)])
+                # Create a new Transfer for this Day
+                transfer = Transfer(
+                    day_id=day.id,
+                    description=transfer_descriptions[i % len(transfer_descriptions)]
+                )
+                db.add(transfer)
+                day.transfers.append(transfer)
                 day.activities.append(activities[i % len(activities)])
                 itinerary.days.append(day)
             db.commit()
+            print(f"Linked days, transfers, and activities for {itinerary.name}")
         
         print("Database seeded successfully!")
+    except Exception as e:
+        print(f"Error seeding database: {e}")
+        traceback.print_exc()
     finally:
         db.close()
 
