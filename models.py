@@ -27,7 +27,7 @@ class Trip(Base):
 class Day(Base):
     __tablename__ = 'day'
     id = Column(Integer, primary_key=True)
-    trip_id = Column(Integer, ForeignKey('trip.id'), nullable=False)
+    trip_id = Column(Integer, ForeignKey('trip.id'), nullable=True)  # Changed to nullable=True
     date = Column(Date, nullable=False)
     trip = relationship("Trip", back_populates="days")
     hotel_id = Column(Integer, ForeignKey('hotel.id'))
