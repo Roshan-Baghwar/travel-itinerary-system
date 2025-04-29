@@ -256,5 +256,4 @@ This project is for educational purposes and not licensed for commercial use.
 ---
 
 **Author**: Roshan Baghwar  
-**Contact**: roshan.br800@gmail.com 
-**Submission Date**: April 29, 2025
+**Contact**: roshan.br800@gmail.com
