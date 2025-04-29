@@ -13,7 +13,7 @@ Backend system for managing travel itineraries, built for the SDE Intern Assignm
 1. **Clone the Repository**:
 
 ```bash
-git clone https://github.com/your-username/travel-itinerary-system.git
+git clone https://github.com/Roshan-Baghwar/travel-itinerary-system.git
 cd travel-itinerary-system
 ```
 
