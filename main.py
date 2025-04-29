@@ -16,12 +16,12 @@ def create_trip(trip: TripCreate, db: Session = Depends(get_db)):
     for day in trip.days:
         if not db.query(Hotel).filter(Hotel.id == day.hotel_id).first():
             raise HTTPException(status_code=400, detail=f"Invalid hotel_id: {day.hotel_id}")
-        for tid in day.transfer_ids:
-            if not db.query(Transfer).filter(Transfer.id == tid).first():
-                raise HTTPException(status_code=400, detail=f"Invalid transfer_id: {tid}")
         for aid in day.activity_ids:
             if not db.query(Activity).filter(Activity.id == aid).first():
                 raise HTTPException(status_code=400, detail=f"Invalid activity_id: {aid}")
+        for tid in day.transfer_ids:
+            if not db.query(Transfer).filter(Transfer.id == tid).first():
+                raise HTTPException(status_code=400, detail=f"Invalid transfer_id: {tid}")
     
     db_trip = Trip(name=trip.name, start_date=trip.start_date, nights=trip.nights)
     db.add(db_trip)
@@ -33,26 +33,97 @@ def create_trip(trip: TripCreate, db: Session = Depends(get_db)):
         db.add(db_day)
         db.commit()
         db.refresh(db_day)
+        # Create new Transfers
         for tid in day_data.transfer_ids:
             transfer = db.query(Transfer).filter(Transfer.id == tid).first()
-            db_day.transfers.append(transfer)
+            new_transfer = Transfer(
+                day_id=db_day.id,
+                description=transfer.description
+            )
+            db.add(new_transfer)
+        # Link Activities
         for aid in day_data.activity_ids:
             activity = db.query(Activity).filter(Activity.id == aid).first()
             db_day.activities.append(activity)
         db.commit()
     
-    return db_trip
+    # Reload trip with relationships for response
+    db_trip = db.query(Trip).options(
+        joinedload(Trip.days).joinedload(Day.transfers),
+        joinedload(Trip.days).joinedload(Day.activities)
+    ).filter(Trip.id == db_trip.id).first()
+    
+    # Manually construct TripResponse
+    trip_response = TripResponse(
+        id=db_trip.id,
+        name=db_trip.name,
+        start_date=db_trip.start_date,
+        nights=db_trip.nights,
+        days=[
+            DayResponse(
+                date=day.date,
+                hotel_id=day.hotel_id,
+                transfer_ids=[t.id for t in day.transfers],
+                activity_ids=[a.id for a in day.activities]
+            )
+            for day in db_trip.days
+        ]
+    )
+    return trip_response
 
 @app.get("/trips", response_model=List[TripResponse])
 def get_trips(db: Session = Depends(get_db)):
-    return db.query(Trip).options(joinedload(Trip.days)).all()
+    trips = db.query(Trip).options(
+        joinedload(Trip.days).joinedload(Day.transfers),
+        joinedload(Trip.days).joinedload(Day.activities)
+    ).all()
+    # Manually construct TripResponse list
+    trip_responses = [
+        TripResponse(
+            id=trip.id,
+            name=trip.name,
+            start_date=trip.start_date,
+            nights=trip.nights,
+            days=[
+                DayResponse(
+                    date=day.date,
+                    hotel_id=day.hotel_id,
+                    transfer_ids=[t.id for t in day.transfers],
+                    activity_ids=[a.id for a in day.activities]
+                )
+                for day in trip.days
+            ]
+        )
+        for trip in trips
+    ]
+    return trip_responses
 
 @app.get("/trips/{trip_id}", response_model=TripResponse)
 def get_trip(trip_id: int, db: Session = Depends(get_db)):
-    trip = db.query(Trip).options(joinedload(Trip.days)).filter(Trip.id == trip_id).first()
+    trip = db.query(Trip).options(
+        joinedload(Trip.days).joinedload(Day.transfers),
+        joinedload(Trip.days).joinedload(Day.activities)
+    ).filter(Trip.id == trip_id).first()
     if not trip:
         raise HTTPException(status_code=404, detail="Trip not found")
-    return trip
+    
+    # Manually construct TripResponse
+    trip_response = TripResponse(
+        id=trip.id,
+        name=trip.name,
+        start_date=trip.start_date,
+        nights=trip.nights,
+        days=[
+            DayResponse(
+                date=day.date,
+                hotel_id=day.hotel_id,
+                transfer_ids=[t.id for t in day.transfers],
+                activity_ids=[a.id for a in day.activities]
+            )
+            for day in trip.days
+        ]
+    )
+    return trip_response
 
 @app.get("/recommend/{nights}", response_model=TripResponse)
 def recommend_itinerary(nights: int, db: Session = Depends(get_db)):
@@ -67,7 +138,6 @@ def recommend_itinerary(nights: int, db: Session = Depends(get_db)):
         print(f"No itinerary found for {nights} nights")  # Debug log
         raise HTTPException(status_code=404, detail="No recommended itinerary found")
     
-    # Create a Trip-like response
     trip_response = TripResponse(
         id=itinerary.id,
         name=itinerary.name,
